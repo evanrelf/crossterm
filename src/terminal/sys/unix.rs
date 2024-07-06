@@ -255,6 +255,61 @@ fn read_supports_keyboard_enhancement_raw() -> io::Result<bool> {
     }
 }
 
+#[cfg(feature = "events")]
+pub fn supports_unicode_core() -> io::Result<bool> {
+    if is_raw_mode_enabled() {
+        read_supports_unicode_core_raw()
+    } else {
+        read_supports_unicode_core_flags()
+    }
+}
+
+#[cfg(feature = "events")]
+fn read_supports_unicode_core_flags() -> io::Result<bool> {
+    enable_raw_mode()?;
+    let flags = read_supports_unicode_core_raw();
+    disable_raw_mode()?;
+    flags
+}
+
+#[cfg(feature = "events")]
+fn read_supports_unicode_core_raw() -> io::Result<bool> {
+    use crate::event::{filter::UnicodeCoreFilter, poll_internal, read_internal, InternalEvent};
+    use std::io::Write;
+    use std::time::Duration;
+
+    // CSI ? 2027 $ p      Test availability of Unicode Core feature as well as the current mode
+    const QUERY: &[u8] = b"\x1B[?2027$p";
+
+    let result = File::open("/dev/tty").and_then(|mut file| {
+        file.write_all(QUERY)?;
+        file.flush()
+    });
+    if result.is_err() {
+        let mut stdout = io::stdout();
+        stdout.write_all(QUERY)?;
+        stdout.flush()?;
+    }
+
+    loop {
+        match poll_internal(Some(Duration::from_millis(2000)), &UnicodeCoreFilter) {
+            Ok(true) => match read_internal(&UnicodeCoreFilter) {
+                Ok(InternalEvent::UnicodeCore(enabled)) => {
+                    return Ok(enabled);
+                }
+                _ => return Ok(false),
+            },
+            Ok(false) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "The Unicode Core status could not be read within a normal duration",
+                ));
+            }
+            Err(_) => {}
+        }
+    }
+}
+
 /// execute tput with the given argument and parse
 /// the output as a u16.
 ///

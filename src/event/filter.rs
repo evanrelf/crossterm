@@ -37,6 +37,17 @@ impl Filter for KeyboardEnhancementFlagsFilter {
 
 #[cfg(unix)]
 #[derive(Debug, Clone)]
+pub(crate) struct UnicodeCoreFilter;
+
+#[cfg(unix)]
+impl Filter for UnicodeCoreFilter {
+    fn eval(&self, event: &InternalEvent) -> bool {
+        matches!(*event, InternalEvent::UnicodeCore(_))
+    }
+}
+
+#[cfg(unix)]
+#[derive(Debug, Clone)]
 pub(crate) struct PrimaryDeviceAttributesFilter;
 
 #[cfg(unix)]
@@ -66,7 +77,7 @@ impl Filter for EventFilter {
 mod tests {
     use super::{
         super::Event, CursorPositionFilter, EventFilter, Filter, InternalEvent,
-        KeyboardEnhancementFlagsFilter, PrimaryDeviceAttributesFilter,
+        KeyboardEnhancementFlagsFilter, PrimaryDeviceAttributesFilter, UnicodeCoreFilter,
     };
 
     #[derive(Debug, Clone)]
@@ -93,6 +104,12 @@ mod tests {
             ))
         );
         assert!(KeyboardEnhancementFlagsFilter.eval(&InternalEvent::PrimaryDeviceAttributes));
+    }
+
+    #[test]
+    fn test_unicode_core_filter_filters_unicode_core() {
+        assert!(!UnicodeCoreFilter.eval(&InternalEvent::Event(Event::Resize(10, 10))));
+        assert!(UnicodeCoreFilter.eval(&InternalEvent::UnicodeCore(true)));
     }
 
     #[test]

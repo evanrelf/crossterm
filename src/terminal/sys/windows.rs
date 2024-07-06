@@ -76,6 +76,11 @@ pub fn supports_keyboard_enhancement() -> std::io::Result<bool> {
     Ok(false)
 }
 
+#[cfg(feature = "events")]
+pub fn supports_unicode_core() -> std::io::Result<bool> {
+    Ok(false)
+}
+
 pub(crate) fn clear(clear_type: ClearType) -> std::io::Result<()> {
     let screen_buffer = ScreenBuffer::current()?;
     let csbi = screen_buffer.info()?;

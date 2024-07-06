@@ -177,11 +177,17 @@ pub(crate) fn parse_csi(buffer: &[u8]) -> io::Result<Option<InternalEvent>> {
         b'P' => Some(Event::Key(KeyCode::F(1).into())),
         b'Q' => Some(Event::Key(KeyCode::F(2).into())),
         b'S' => Some(Event::Key(KeyCode::F(4).into())),
-        b'?' => match buffer[buffer.len() - 1] {
-            b'u' => return parse_csi_keyboard_enhancement_flags(buffer),
-            b'c' => return parse_csi_primary_device_attributes(buffer),
-            _ => None,
-        },
+        b'?' => {
+            let last_byte = buffer[buffer.len() - 1];
+            if buffer.starts_with(b"\x1B[?2027") {
+                return parse_csi_unicode_core(buffer);
+            }
+            match last_byte {
+                b'u' => return parse_csi_keyboard_enhancement_flags(buffer),
+                b'c' => return parse_csi_primary_device_attributes(buffer),
+                _ => None,
+            }
+        }
         b'0'..=b'9' => {
             // Numbered escape code.
             if buffer.len() == 3 {
@@ -286,6 +292,26 @@ fn parse_csi_keyboard_enhancement_flags(buffer: &[u8]) -> io::Result<Option<Inte
     // }
 
     Ok(Some(InternalEvent::KeyboardEnhancementFlags(flags)))
+}
+
+fn parse_csi_unicode_core(buffer: &[u8]) -> io::Result<Option<InternalEvent>> {
+    assert!(buffer.starts_with(b"\x1B[?2027;"));
+    assert!(buffer.ends_with(b"$y"));
+
+    // TODO: Should "reset" and "permanently reset" be considered supported or not? The terminal
+    // _knows_ what mode 2027 is, but doesn't have it _enabled_. Can the user's program enable it?
+    //
+    // Possible settings: https://vt100.net/docs/vt510-rm/DECRPM.html
+    let supported = match buffer[8] {
+        b'0' => false, // not recognized
+        b'1' => true,  // set
+        b'2' => false, // reset
+        b'3' => true,  // permanently set
+        b'4' => false, // permanently reset
+        _ => false,    // wtf?
+    };
+
+    Ok(Some(InternalEvent::UnicodeCore(supported)))
 }
 
 fn parse_csi_primary_device_attributes(buffer: &[u8]) -> io::Result<Option<InternalEvent>> {
@@ -1501,6 +1527,35 @@ mod tests {
                 KeyModifiers::CONTROL,
                 KeyEventKind::Release,
             )))),
+        );
+    }
+
+    #[test]
+    fn test_parse_csi_mode_2027() {
+        // Not recognized
+        assert_eq!(
+            parse_event(b"\x1B[?2027;0$y", false).unwrap(),
+            Some(InternalEvent::UnicodeCore(false)),
+        );
+        // Set
+        assert_eq!(
+            parse_event(b"\x1B[?2027;1$y", false).unwrap(),
+            Some(InternalEvent::UnicodeCore(true)),
+        );
+        // Reset
+        assert_eq!(
+            parse_event(b"\x1B[?2027;2$y", false).unwrap(),
+            Some(InternalEvent::UnicodeCore(false)),
+        );
+        // Permanently set
+        assert_eq!(
+            parse_event(b"\x1B[?2027;3$y", false).unwrap(),
+            Some(InternalEvent::UnicodeCore(true)),
+        );
+        // Permanently reset
+        assert_eq!(
+            parse_event(b"\x1B[?2027;4$y", false).unwrap(),
+            Some(InternalEvent::UnicodeCore(false)),
         );
     }
 }

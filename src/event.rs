@@ -308,6 +308,56 @@ bitflags! {
     }
 }
 
+#[cfg(feature = "events")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EnableUnicodeCore;
+
+impl Command for EnableUnicodeCore {
+    fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str(csi!("?2027h"))
+    }
+
+    #[cfg(windows)]
+    fn execute_winapi(&self) -> std::io::Result<()> {
+        use std::io;
+
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Unicode core not implemented for the legacy Windows API.",
+        ))
+    }
+
+    #[cfg(windows)]
+    fn is_ansi_code_supported(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(feature = "events")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DisableUnicodeCore;
+
+impl Command for DisableUnicodeCore {
+    fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str(csi!("?2027l"))
+    }
+
+    #[cfg(windows)]
+    fn execute_winapi(&self) -> std::io::Result<()> {
+        use std::io;
+
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Unicode core not implemented for the legacy Windows API.",
+        ))
+    }
+
+    #[cfg(windows)]
+    fn is_ansi_code_supported(&self) -> bool {
+        false
+    }
+}
+
 /// A command that enables mouse event capturing.
 ///
 /// Mouse events can be captured with [read](./fn.read.html)/[poll](./fn.poll.html).
@@ -1180,6 +1230,8 @@ pub(crate) enum InternalEvent {
     /// The progressive keyboard enhancement flags enabled by the terminal.
     #[cfg(unix)]
     KeyboardEnhancementFlags(KeyboardEnhancementFlags),
+    #[cfg(unix)]
+    UnicodeCore(bool),
     /// Attributes and architectural class of the terminal.
     #[cfg(unix)]
     PrimaryDeviceAttributes,
